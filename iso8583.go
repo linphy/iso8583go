@@ -1,9 +1,12 @@
 package iso8583
 
 import (
+	"errors"
+	"fmt"
 	"strconv"
 )
 
+const DEBUG = true
 const MAX_ISO_DATA = (1024 * 1)
 const MIN_ISO_LEN = 10
 const FIELD_MAX_SIZE = 512
@@ -254,33 +257,41 @@ func NewIsoEx(msgtype, bittype, lentype int16, isodef []IsoExDef) (*IsoEx, error
 }
 
 func (iso *IsoEx) Str2IsoEx(data []byte) error {
+	if len(data) == 0 {
+		return errors.New("data len err")
+	}
+	DumpHex(data)
 	iso.buffer = data
+	DumpHex(iso.buffer[:2])
 	start := 0
+	var msgid []byte
 	if iso.msgtype == ASCTYPE {
-		iso.field[0].data = iso.buffer[:4]
+		msgid = iso.buffer[:4]
 		start += 4
 	} else {
-		iso.field[0].data = Bcd2Asc(iso.buffer[:2], 4, 0)
+		msgid = Bcd2Asc(iso.buffer[:2], 4, 0)
 		start += 2
 	}
+
 	var bitnum int
+	var bitbuffer []byte
 	if iso.bittype == BCDTYPE {
 		if iso.buffer[start]&0x80 != 0x80 {
-			iso.field[1].data = iso.buffer[start : start+8]
+			bitbuffer = iso.buffer[start : start+8]
 			bitnum = 8
 			start += 8
 		} else {
-			iso.field[1].data = iso.buffer[start : start+16]
+			bitbuffer = iso.buffer[start : start+16]
 			bitnum = 16
 			start += 16
 		}
 	} else {
 		if iso.buffer[start]&0x80 != 0x80 {
-			iso.field[1].data = Asc2Bcd(iso.buffer[start:start+16], 16, 0)
+			bitbuffer = Asc2Bcd(iso.buffer[start:start+16], 16, 0)
 			bitnum = 8
 			start += 16
 		} else {
-			iso.field[1].data = Asc2Bcd(iso.buffer[start:start+32], 32, 0)
+			bitbuffer = Asc2Bcd(iso.buffer[start:start+32], 32, 0)
 			bitnum = 16
 			start += 32
 		}
@@ -291,22 +302,34 @@ func (iso *IsoEx) Str2IsoEx(data []byte) error {
 	} else {
 		iso.field = make([]IsoField, 128)
 	}
+	iso.field[0].data = msgid
+	iso.field[1].data = bitbuffer
+
+	DumpHex(iso.field[0].data)
+	DumpHex(iso.field[1].data)
+	fmt.Printf("start=[%d]\n", start)
 	var i int
-	var j uint
+	var j int
 
 	for i = 0; i < bitnum; i++ {
-		for j = 7; j >= 0; j++ {
-			if (iso.field[1].data[i] & (0x01 << j)) == 0 {
+		for j = 7; j >= 0; j-- {
+			j_bak := uint(j)
+			if (bitbuffer[i] & (0x01 << j_bak)) == 0 {
+				//fmt.Printf("[%02x]j=%d\n", bitbuffer[i], j)
+				//fmt.Printf("0")
 				continue
 			}
-			bit := (i+1)*8 - int(j) - 1
+			bit := (i+1)*8 - j - 1
 			if bit == 0 {
+				//fmt.Printf("1")
 				continue
 			}
-
+			//fmt.Printf("1")
+			//fmt.Printf("[%d][%d]1", i, j)
 			start, _ = iso.getFiledValue(bit, start)
 		}
 	}
+	fmt.Printf("\n")
 	return nil
 }
 
@@ -323,7 +346,7 @@ func (iso *IsoEx) getFiledValue(bitno int, start int) (int, error) {
 				length = int(iso.buffer[start]>>4)*10 + int(iso.buffer[start]&0x0f)
 				start += 1 //LENGTH LL2
 			} else {
-				length = int(iso.buffer[start]>>4)*100 + int((iso.buffer[start]&0x0f)*10) + int(iso.buffer[start+1]>>4)
+				length = int(iso.buffer[start]&0x0f)*100 + int((iso.buffer[start+1]>>4)*10) + int(iso.buffer[start+1]&0x0f)
 				start += 2 //LENGTH LL3
 			}
 		} else {
@@ -339,8 +362,19 @@ func (iso *IsoEx) getFiledValue(bitno int, start int) (int, error) {
 
 	switch dat_type & ISO_DATA_MASK {
 	case ISODBCD:
-		iso.field[bitno].data = Bcd2Asc(iso.buffer[start:start+length/2], length/2, 0)
-		start += length / 2
+		var char_len int
+		if length%2 == 0 {
+			char_len = length / 2
+		} else {
+			char_len = (length + 1) / 2
+		}
+		tmp_data := Bcd2Asc(iso.buffer[start:start+char_len], char_len*2, 0)
+		if iso.iso_def[bitno].def&ISO_JUST_MASK == 0x01 {
+			iso.field[bitno].data = tmp_data[1:]
+		} else {
+			iso.field[bitno].data = tmp_data[:length]
+		}
+		start += char_len
 	case ISODASC:
 		iso.field[bitno].data = iso.buffer[start : start+length]
 		start += length
@@ -356,5 +390,38 @@ func (iso *IsoEx) getFiledValue(bitno int, start int) (int, error) {
 	}
 
 	iso.field[bitno].bitflag = 1
+	Debug("%03d--%03d--%03d--%s\n", bitno+1, length, start, iso.field[bitno].data)
+
 	return start, nil
+}
+
+func (iso *IsoEx) Iso2StrEx(data []byte) error {
+}
+
+func (iso *IsoEx) setFiledValue(bitno int, data []byte) ([]byte, error) {
+	len_type := int(iso.iso_def[bitno].def >> 6)
+	dat_type := int(iso.iso_def[bitno].def & 0x3F)
+	return nil
+}
+func DumpHex(data []byte) error {
+	if !DEBUG {
+		return nil
+	}
+	for i := 0; i < len(data); i++ {
+		if (i+1)%25 != 0 {
+			fmt.Printf("%02x ", data[i])
+		} else {
+			fmt.Printf("%02x\n", data[i])
+		}
+	}
+	fmt.Printf("\n")
+	return nil
+}
+
+func Debug(format string, a ...interface{}) error {
+	if !DEBUG {
+		return nil
+	}
+	fmt.Printf(format, a...)
+	return nil
 }
