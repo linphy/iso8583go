@@ -401,6 +401,8 @@ func (iso *IsoEx) Iso2StrEx(data []byte) error {
 func (iso *IsoEx) setFiledValue(bitno int, data []byte) ([]byte, error) {
 	len_type := int(iso.iso_def[bitno].def >> 6)
 	dat_type := int(iso.iso_def[bitno].def & 0x3F)
+
+	
 	return nil
 }
 func DumpHex(data []byte) error {
