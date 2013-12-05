@@ -31,3 +31,23 @@ func TestStr2IsoEx(t *testing.T) {
 	iso.Str2IsoEx(data)
 	fmt.Println(iso)
 }
+
+/*
+Field[  0] Len[  4] Data:[0220]
+Field[  2] Len[ 19] Data:[8880191000000490496]
+Field[  3] Len[  6] Data:[200000]
+Field[  4] Len[ 12] Data:[000000000056]
+Field[ 11] Len[  6] Data:[001082]
+Field[ 14] Len[  4] Data:[8880]
+Field[ 22] Len[  3] Data:[021]
+Field[ 25] Len[  2] Data:[00]
+Field[ 35] Len[ 33] Data:[8880191000000490496**************]
+Field[ 37] Len[ 12] Data:[010100372747]
+Field[ 38] Len[  6] Data:[      ]
+Field[ 41] Len[  8] Data:[88654321]
+Field[ 42] Len[ 15] Data:[819541100010001]
+Field[ 49] Len[  3] Data:[156]
+Field[ 53] Len[ 16] Data:[0000000000000000]
+Field[ 60] Len[  8] Data:[25000005]
+Field[ 61] Len[ 12] Data:[000000000000]
+*/
