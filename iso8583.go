@@ -194,9 +194,14 @@ var IsoExDefYL = []IsoExDef{
 	{64, ISOLFIX | ISODBIN | ISOF0 | ISOLJUST}}
 
 func Asc2Bcd(asc []byte, length int32, r_align int32) []byte {
-	var i, flag int32
+	var i, flag, bcd_len int32
 	var ch byte
-	bcd := make([]byte, length/2)
+	if length%2 == 1 {
+		bcd_len = (length + 1) / 2
+	} else {
+		bcd_len = length / 2
+	}
+	bcd := make([]byte, bcd_len)
 
 	if (length%2) == 1 && r_align == 1 {
 		flag = 1
@@ -365,14 +370,14 @@ func (iso *IsoEx) getFiledValue(bitno int, start int) (int, error) {
 		var char_len int
 		if length%2 == 0 {
 			char_len = length / 2
+			iso.field[bitno].data = Bcd2Asc(iso.buffer[start:start+char_len], char_len*2, 0)
 		} else {
 			char_len = (length + 1) / 2
-		}
-		tmp_data := Bcd2Asc(iso.buffer[start:start+char_len], char_len*2, 0)
-		if iso.iso_def[bitno].def&ISO_JUST_MASK == 0x01 {
-			iso.field[bitno].data = tmp_data[1:]
-		} else {
-			iso.field[bitno].data = tmp_data[:length]
+			if iso.iso_def[bitno].def&ISO_JUST_MASK == 0x01 {
+				iso.field[bitno].data = Bcd2Asc(iso.buffer[start:start+char_len], char_len*2, 1)
+			} else {
+				iso.field[bitno].data = Bcd2Asc(iso.buffer[start:start+char_len], char_len*2, 0)
+			}
 		}
 		start += char_len
 	case ISODASC:
@@ -390,20 +395,78 @@ func (iso *IsoEx) getFiledValue(bitno int, start int) (int, error) {
 	}
 
 	iso.field[bitno].bitflag = 1
-	Debug("%03d--%03d--%03d--%s\n", bitno+1, length, start, iso.field[bitno].data)
+	Debug("%03d--%03d--%03d--[%s]\n", bitno+1, length, start, iso.field[bitno].data)
 
 	return start, nil
 }
 
 func (iso *IsoEx) Iso2StrEx(data []byte) error {
+	bitnum := 8 //默认8字节位图
+	if len(iso.field) > 64 {
+		bitnum = 16
+	}
+
+	var i int
+	var j int
+
+	for i = 0; i < bitnum; i++ {
+		for j = 7; j >= 0; j-- {
+			j_bak := uint(j)
+			if (bitbuffer[i] & (0x01 << j_bak)) == 0 {
+			}
+		}
+	}
+	return nil
 }
 
 func (iso *IsoEx) setFiledValue(bitno int, data []byte) ([]byte, error) {
+	if iso.field[bitno].bitflag == 0 {
+		return nil, nil
+	}
 	len_type := int(iso.iso_def[bitno].def >> 6)
 	dat_type := int(iso.iso_def[bitno].def & 0x3F)
 
-	
-	return nil
+	var tmp_data []byte
+	char_len := len(data)
+	switch dat_type & ISO_DATA_MASK {
+	case ISODBCD:
+		if iso.iso_def[bitno].def&ISO_JUST_MASK == 0x01 {
+			tmp_data = Asc2Bcd(data, int32(char_len), 1)
+		} else {
+			tmp_data = Asc2Bcd(data, int32(char_len), 0)
+		}
+	default:
+		tmp_data = data
+	}
+
+	length := len(tmp_data)
+	var filed_data []byte
+	switch len_type {
+	case ISO_LEN_FIX:
+		filed_data = tmp_data
+	case ISO_LEN_VAR2:
+		if iso.lentype == BCDTYPE {
+			filed_data = make([]byte, length+1)
+			filed_data[0] = (byte(char_len/10) << 4) | byte(char_len%10)
+		} else {
+			filed_data = make([]byte, length+2)
+			filed_data = []byte(fmt.Sprintf("%02d", length))
+		}
+	case ISO_LEN_VAR3:
+		if iso.lentype == BCDTYPE {
+			filed_data = make([]byte, length+1)
+			filed_data[0] = byte(length / 100)
+			filed_data[1] = (byte(length/10) << 4) | byte(length%10)
+		} else {
+			filed_data = make([]byte, length+2)
+			filed_data = []byte(fmt.Sprintf("%03d", length))
+		}
+	}
+	DumpHex(filed_data)
+	filed_data = append(filed_data, tmp_data...)
+	DumpHex(filed_data)
+	return filed_data, nil
+
 }
 func DumpHex(data []byte) error {
 	if !DEBUG {
