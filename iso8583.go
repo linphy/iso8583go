@@ -267,6 +267,7 @@ func (iso *IsoEx) Str2IsoEx(data []byte) error {
 	}
 	DumpHex(data)
 	iso.buffer = data
+	buf_len := len(iso.buffer)
 	//DumpHex(iso.buffer[:2])
 	start := 0
 	var msgid []byte
@@ -331,6 +332,9 @@ func (iso *IsoEx) Str2IsoEx(data []byte) error {
 			}
 			//fmt.Printf("1")
 			//fmt.Printf("[%d][%d]1", i, j)
+			if start > buf_len {
+				return fmt.Errorf("iso.data Invalid Memory Access,now point to %d,and bit number is %d", start, bit)
+			}
 			start, _ = iso.getFiledValue(bit, start)
 		}
 	}
@@ -395,6 +399,9 @@ func (iso *IsoEx) getFiledValue(bitno int, start int) (int, error) {
 	}
 
 	iso.field[bitno].bitflag = 1
+	if len(iso.field[bitno].data) > int(iso.iso_def[bitno].length) {
+		return start, errors.New("filed data exceed def max length")
+	}
 	Debug("%03d--%03d--%03d--[%s]\n", bitno+1, length, start, iso.field[bitno].data)
 
 	return start, nil
@@ -439,6 +446,9 @@ func (iso *IsoEx) Iso2StrEx() ([]byte, error) {
 	if bitnum == 16 {
 		bitbuffer[0] |= 0x80
 	}
+	// if iso.msgtype == ASCTYPE {
+	// 	tmp_bitbuffer = Bcd2Asc(bitbuffer, len(bitbuffer)*2, 0)
+	// }
 	data = append(data, msg_data...)
 	data = append(data, bitbuffer...)
 	data = append(data, tmp_data...)
