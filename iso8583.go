@@ -267,7 +267,7 @@ func (iso *IsoEx) Str2IsoEx(data []byte) error {
 	}
 	DumpHex(data)
 	iso.buffer = data
-	DumpHex(iso.buffer[:2])
+	//DumpHex(iso.buffer[:2])
 	start := 0
 	var msgid []byte
 	if iso.msgtype == ASCTYPE {
@@ -374,9 +374,9 @@ func (iso *IsoEx) getFiledValue(bitno int, start int) (int, error) {
 		} else {
 			char_len = (length + 1) / 2
 			if iso.iso_def[bitno].def&ISO_JUST_MASK == 0x01 {
-				iso.field[bitno].data = Bcd2Asc(iso.buffer[start:start+char_len], char_len*2, 1)
+				iso.field[bitno].data = Bcd2Asc(iso.buffer[start:start+char_len], length, 1)
 			} else {
-				iso.field[bitno].data = Bcd2Asc(iso.buffer[start:start+char_len], char_len*2, 0)
+				iso.field[bitno].data = Bcd2Asc(iso.buffer[start:start+char_len], length, 0)
 			}
 		}
 		start += char_len
@@ -400,23 +400,49 @@ func (iso *IsoEx) getFiledValue(bitno int, start int) (int, error) {
 	return start, nil
 }
 
-func (iso *IsoEx) Iso2StrEx(data []byte) error {
+func (iso *IsoEx) Iso2StrEx() ([]byte, error) {
 	bitnum := 8 //默认8字节位图
 	if len(iso.field) > 64 {
 		bitnum = 16
 	}
-
+	var msg_data []byte
+	if iso.msgtype == BCDTYPE {
+		msg_data = Asc2Bcd(iso.field[0].data, 4, 0)
+	} else {
+		msg_data = iso.field[0].data[:4]
+	}
 	var i int
 	var j int
+	var bitbuffer, tmp_data, data []byte
+
+	bitbuffer = make([]byte, bitnum)
+	tmp_data = make([]byte, 0, 1024)
 
 	for i = 0; i < bitnum; i++ {
 		for j = 7; j >= 0; j-- {
-			j_bak := uint(j)
-			if (bitbuffer[i] & (0x01 << j_bak)) == 0 {
+			bit := (i+1)*8 - j - 1
+			if bit == 0 {
+				continue
 			}
+			if iso.field[bit].bitflag == 0 {
+				continue
+			}
+			j_bak := uint(j)
+			bitbuffer[i] |= (0x01 << j_bak)
+			ret_data, err := iso.setFiledValue(bit, iso.field[bit].data)
+			if err != nil {
+				return nil, errors.New("setFiledValue failed ")
+			}
+			tmp_data = append(tmp_data, ret_data...)
 		}
 	}
-	return nil
+	if bitnum == 16 {
+		bitbuffer[0] |= 0x80
+	}
+	data = append(data, msg_data...)
+	data = append(data, bitbuffer...)
+	data = append(data, tmp_data...)
+	return data, nil
 }
 
 func (iso *IsoEx) setFiledValue(bitno int, data []byte) ([]byte, error) {
@@ -439,31 +465,31 @@ func (iso *IsoEx) setFiledValue(bitno int, data []byte) ([]byte, error) {
 		tmp_data = data
 	}
 
-	length := len(tmp_data)
+	length := len(iso.field[bitno].data)
 	var filed_data []byte
 	switch len_type {
 	case ISO_LEN_FIX:
 		filed_data = tmp_data
 	case ISO_LEN_VAR2:
 		if iso.lentype == BCDTYPE {
-			filed_data = make([]byte, length+1)
+			filed_data = make([]byte, 1)
 			filed_data[0] = (byte(char_len/10) << 4) | byte(char_len%10)
 		} else {
-			filed_data = make([]byte, length+2)
+			filed_data = make([]byte, 2)
 			filed_data = []byte(fmt.Sprintf("%02d", length))
 		}
+		filed_data = append(filed_data, tmp_data...)
 	case ISO_LEN_VAR3:
 		if iso.lentype == BCDTYPE {
-			filed_data = make([]byte, length+1)
+			filed_data = make([]byte, 2)
 			filed_data[0] = byte(length / 100)
 			filed_data[1] = (byte(length/10) << 4) | byte(length%10)
 		} else {
-			filed_data = make([]byte, length+2)
+			filed_data = make([]byte, 3)
 			filed_data = []byte(fmt.Sprintf("%03d", length))
 		}
+		filed_data = append(filed_data, tmp_data...)
 	}
-	DumpHex(filed_data)
-	filed_data = append(filed_data, tmp_data...)
 	DumpHex(filed_data)
 	return filed_data, nil
 
