@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-const DEBUG = true
+const DEBUG = false
 const MAX_ISO_DATA = (1024 * 1)
 const MIN_ISO_LEN = 10
 const FIELD_MAX_SIZE = 512
@@ -313,7 +313,7 @@ func (iso *IsoEx) Str2IsoEx(data []byte) error {
 
 	DumpHex(iso.field[0].data)
 	DumpHex(iso.field[1].data)
-	fmt.Printf("start=[%d]\n", start)
+	//fmt.Printf("start=[%d]\n", start)
 	var i int
 	var j int
 
@@ -338,7 +338,7 @@ func (iso *IsoEx) Str2IsoEx(data []byte) error {
 			start, _ = iso.getFiledValue(bit, start)
 		}
 	}
-	fmt.Printf("\n")
+	//fmt.Printf("\n")
 	return nil
 }
 
